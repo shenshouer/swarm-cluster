@@ -1,0 +1,42 @@
+#cloud-config
+
+coreos:
+  units:
+    - name: docker.service
+      command: start
+      content: |
+        [Unit]
+        Description=Docker Application Container Engine
+        Documentation=http://docs.docker.com
+        After=docker.socket early-docker.target network.target
+        Requires=docker.socket early-docker.target
+        [Service]
+        EnvironmentFile=-/run/flannel_docker_opts.env
+        MountFlags=slave
+        LimitNOFILE=1048576
+        LimitNPROC=1048576
+        ExecStart=/usr/lib/coreos/dockerd daemon -H tcp://0.0.0.0:2375 \
+          -H unix:///var/run/docker.sock \
+          $DOCKER_OPTS $DOCKER_OPT_BIP $DOCKER_OPT_MTU $DOCKER_OPT_IPMASQ
+        [Install]
+        WantedBy=multi-user.target
+    - name: swarm-node.service
+      command: start
+      content: |
+        [Unit]
+        Description=swarm
+        After=docker.service
+        Requires=docker.service
+        [Service]
+        TimeoutStartSec=0
+        Restart=always
+        ExecStartPre=-/usr/bin/docker rm swarm-node
+        ExecStart=/usr/bin/docker run \
+           -p 4000:4000 \
+           --name=swarm-node \
+           swarm join \
+          --advertise $private_ipv4:2375 \
+          consul://__CONSUL_IP__:8500
+        ExecStop=/usr/bin/docker kill swarm-node
+        [Install]
+        WantedBy=multi-user.target
